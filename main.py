@@ -183,7 +183,7 @@ with st2:
 with st3:
     temp_values['st_now'] = st.number_input("Aktuell", 0, None, cookie['st_now'], 1, None, "st_now", "Aktueller Stärkewert", label_visibility="visible")
 with st4:
-    _selected_dice = st.selectbox("Würfel", [4, 6, 8, 10, 12, 20, 100], index=5, format_func=dice_label)
+    st.empty()
 
 # GES
 _rolled_dice = ""
@@ -195,8 +195,7 @@ with ge2:
 with ge3:
     temp_values['ge_now'] = st.number_input("Aktuell", 0, None, cookie['ge_now'], 1, None, "ge_now", "Aktueller Geschicklichkeitswert", label_visibility="collapsed")
 with ge4:
-    if st.button("Würfeln", use_container_width=True):
-        _rolled_dice = random.randint(1, _selected_dice)
+    st.empty()
 
 # WIL
 wi1, wi2, wi3, wi4 = st.columns([1, 2, 2, 5], vertical_alignment="bottom")
@@ -207,7 +206,7 @@ with wi2:
 with wi3:
     temp_values['wi_now'] = st.number_input("Aktuell", 0, None, cookie['wi_now'], 1, None, "wi_now", "Aktueller Willenskraftwert", label_visibility="collapsed")
 with wi4:
-    st.text(f"Letzer Würfelwurf: {_rolled_dice}")
+    st.empty()
 
 # TP
 tp1, tp2, tp3, tp4 = st.columns([1, 2, 2, 5], vertical_alignment="bottom")
@@ -340,6 +339,13 @@ with tab3:
         st.rerun()
         #temp_values["items"].append(new_item)
         # TODO: add to cookie as json object
+
+# Sidebar
+with st.sidebar:
+    _selected_dice = st.selectbox("Würfel", [4, 6, 8, 10, 12, 20, 100], index=5, format_func=dice_label)
+    if st.button("Würfeln", use_container_width=True):
+        _rolled_dice = random.randint(1, _selected_dice)
+    st.text(f"Letzer Würfelwurf: {_rolled_dice}")
 
 # Logic
 if is_save_pressed:
