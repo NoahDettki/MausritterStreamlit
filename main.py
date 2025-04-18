@@ -7,8 +7,13 @@ import random
 # Session state
 if "last_saved" not in st.session_state:
     st.session_state.last_saved = "Nicht in dieser Sitzung"
-if "all_items" not in st.session_state:
-    st.session_state.all_items = []
+if "new_item_toast" not in st.session_state:
+    st.session_state.new_item_toast = False
+elif st.session_state.new_item_toast != False:
+    st.toast(f"{st.session_state.new_item_toast} wurde dem Rucksack hinzugefügt!")
+    st.session_state.new_item_toast = False
+if "backpack" not in st.session_state:
+    st.session_state.backpack = []
 if "primary" not in st.session_state:
     st.session_state.primary = None
 if "secondary" not in st.session_state:
@@ -47,18 +52,18 @@ def display_equipment(item):
     eq_item.markdown(f"**{item.name}**", help=item.description)
     # Attack dice or armor value
     if item.dice != None:
-        eq_stat.button(item.dice, disabled=True, icon=":material/casino:", key=f"{item.name}-stat", help="Angriffswürfel", use_container_width=True)
+        eq_stat.button(item.dice, disabled=True, icon=":material/casino:", key=f"{item.id}-stat", help="Angriffswürfel", use_container_width=True)
     elif item.armor != None:
-        eq_stat.button(str(item.armor), disabled=True, icon=":material/shield:", key=f"{item.name}-stat", help="Verteidigung", use_container_width=True)
+        eq_stat.button(str(item.armor), disabled=True, icon=":material/shield:", key=f"{item.id}-stat", help="Verteidigung", use_container_width=True)
     # Condition
     if item.condition != None:
-        eq_cond.button("", icon=f":material/counter_{item.condition}:", key=f"{item.name}-cond", help="Übrige Anwendungen", on_click=change_condition, args=(item,), use_container_width=True)
+        eq_cond.button("", icon=f":material/counter_{item.condition}:", key=f"{item.id}-cond", help="Übrige Anwendungen", on_click=change_condition, args=(item,), use_container_width=True)
     # Weight
-    eq_weig.button(str(item.weight), disabled=True, icon=":material/weight:", key=f"{item.name}-weight", help="Gewicht", use_container_width=True)
+    eq_weig.button(str(item.weight), disabled=True, icon=":material/weight:", key=f"{item.id}-weight", help="Gewicht", use_container_width=True)
     # Moving
-    eq_move.button("", type="secondary", icon=":material/exit_to_app:", key=f"{item.name}-move", help="Gegenstand in den Rucksack verschieben", on_click=item_to_backpack, args=(item,), use_container_width=True)
+    eq_move.button("", type="secondary", icon=":material/exit_to_app:", key=f"{item.id}-move", help="Gegenstand in den Rucksack verschieben", on_click=item_to_backpack, args=(item,), use_container_width=True)
     # Delete
-    eq_delete.button("", type="primary", icon=":material/delete_forever:", key=f"{item.name}-delete", help="Item wegwerfen", on_click=item_to_backpack, args=(item,True), use_container_width=True)
+    eq_delete.button("", type="primary", icon=":material/delete_forever:", key=f"{item.id}-delete", help="Item wegwerfen", on_click=item_to_backpack, args=(item,True), use_container_width=True)
 
 def get_move_options(item):
     match(item.type):
@@ -139,7 +144,7 @@ def move_item(item, option):
         case _:
             print("Wrong move option")
     # Only remove item from backpack if moving was successful
-    st.session_state.all_items.remove(item)
+    st.session_state.backpack.remove(item)
     st.rerun()
 
 def item_to_backpack(item, delete=False):
@@ -152,7 +157,7 @@ def item_to_backpack(item, delete=False):
     if st.session_state.body2 == item:
         st.session_state.body2 = None
     if not delete:
-        st.session_state.all_items.append(item)
+        st.session_state.backpack.append(item)
 
 def change_condition(item):
     item.condition -= 1
@@ -160,7 +165,22 @@ def change_condition(item):
         item.condition = 3
 
 def delete_item(item):
-    st.session_state.all_items.remove(item)
+    st.session_state.backpack.remove(item)
+
+def get_unique_id():
+    unique_id = 0
+    used_ids = {item.id for item in st.session_state.backpack}
+    if st.session_state.primary:
+        used_ids.add(st.session_state.primary.id)
+    if st.session_state.secondary:
+        used_ids.add(st.session_state.secondary.id)
+    if st.session_state.body1:
+        used_ids.add(st.session_state.body1.id)
+    if st.session_state.body2:
+        used_ids.add(st.session_state.body2.id)
+    while unique_id in used_ids:
+        unique_id += 1
+    return unique_id
 
 # Title
 st.title("Mausritter Charakterbogen")
@@ -272,29 +292,29 @@ with tab1:
 
 with tab2:
     st.text("Du kannst ohne Mühen eine Last von 6 aushalten. Alles darüber hinaus belastet dich so sehr, dass du nicht mehr rennen kannst und alle Proben mit Nachteil würfeln musst.")
-    _weight = sum(item.weight for item in st.session_state.all_items)
+    _weight = sum(item.weight for item in st.session_state.backpack)
     if _weight > 6:
         st.warning("Du bist belastet!")
-    for item in st.session_state.all_items:
+    for item in st.session_state.backpack:
         bp_item, bp_stat, bp_cond, bp_weig, bp_move, bp_delete = st.columns([3.5,2,1,1.5,2.5,1])
         # Name and description
         bp_item.markdown(f"**{item.name}**", help=item.description)
         # Attack dice or armor value
         if item.dice != None:
-            bp_stat.button(item.dice, disabled=True, icon=":material/casino:", key=f"{item.name}-stat", help="Angriffswürfel", use_container_width=True)
+            bp_stat.button(item.dice, disabled=True, icon=":material/casino:", key=f"{item.id}-stat", help="Angriffswürfel", use_container_width=True)
         elif item.armor != None:
-            bp_stat.button(str(item.armor), disabled=True, icon=":material/shield:", key=f"{item.name}-stat", help="Verteidigung", use_container_width=True)
+            bp_stat.button(str(item.armor), disabled=True, icon=":material/shield:", key=f"{item.id}-stat", help="Verteidigung", use_container_width=True)
         # Condition
         if item.condition != None:
-            bp_cond.button("", icon=f":material/counter_{item.condition}:", key=f"{item.name}-cond", help="Übrige Anwendungen", on_click=change_condition, args=(item,), use_container_width=True)
+            bp_cond.button("", icon=f":material/counter_{item.condition}:", key=f"{item.id}-cond", help="Übrige Anwendungen", on_click=change_condition, args=(item,), use_container_width=True)
         # Weight
-        bp_weig.button(str(item.weight), disabled=True, icon=":material/weight:", key=f"{item.name}-weight", help="Gewicht", use_container_width=True)
+        bp_weig.button(str(item.weight), disabled=True, icon=":material/weight:", key=f"{item.id}-weight", help="Gewicht", use_container_width=True)
         # Moving
-        _selection = bp_move.selectbox("move", get_move_options(item), index=None, key=f"{item.name}-move", help="Gegenstand verschieben", placeholder="Verschieben", label_visibility="collapsed")
+        _selection = bp_move.selectbox("move", get_move_options(item), index=None, key=f"{item.id}-move", help="Gegenstand verschieben", placeholder="Verschieben", label_visibility="collapsed")
         if _selection != None:
             move_item(item, _selection)
         # Delete
-        bp_delete.button("", type="primary", icon=":material/delete_forever:", key=f"{item.name}-delete", help="Item wegwerfen", on_click=delete_item, args=(item,), use_container_width=True)
+        bp_delete.button("", type="primary", icon=":material/delete_forever:", key=f"{item.id}-delete", help="Item wegwerfen", on_click=delete_item, args=(item,), use_container_width=True)
 
 with tab3:
     st.text("Hier kannst du einen neuen Gegenstand oder Zustand erstellen, der dann in deinem Rucksack landet.")
@@ -337,8 +357,12 @@ with tab3:
 
 
     if st.button("Gegenstand hinzufügen", type="primary") and new_item_name != "":
-        new_item = Item(new_item_name, new_item_type, new_item_space, new_item_condition, new_item_dice, new_item_armor, new_item_description)
-        st.session_state.all_items.append(new_item)
+        # As two items can have the same name but every streamlit component needs a unique id,
+        # it is important to give each item a unique id.
+        new_item_id = get_unique_id()
+        new_item = Item(new_item_id, new_item_name, new_item_type, new_item_space, new_item_condition, new_item_dice, new_item_armor, new_item_description)
+        st.session_state.backpack.append(new_item)
+        st.session_state.new_item_toast = new_item.type.value
         st.rerun()
         #temp_values["items"].append(new_item)
         # TODO: add to cookie as json object
