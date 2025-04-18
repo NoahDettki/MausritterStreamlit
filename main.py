@@ -1,3 +1,4 @@
+from typing import Literal
 import streamlit as st
 from streamlit_local_storage import LocalStorage
 import time
@@ -14,6 +15,8 @@ elif st.session_state.new_item_toast != False:
     st.session_state.new_item_toast = False
 if "backpack" not in st.session_state:
     st.session_state.backpack = []
+if "ignored" not in st.session_state:
+    st.session_state.ignored = []
 if "primary" not in st.session_state:
     st.session_state.primary = None
 if "secondary" not in st.session_state:
@@ -39,6 +42,19 @@ if cookie == None:
         'tp_now': 0
     }
 temp_values = {key: None for key in cookie}
+HELP_SAVE = "Speichert dein Charakterblatt als Cookie, sodass es beim Neuladen der Seite erhalten bleibt."
+HELP_REMOVE_ITEM = "Gegenstand entfernen"
+HELP_REMOVE_CONDITION = "Zustand auflösen"
+
+def calculate_guts(level) -> Literal[0, 1, 2, 3]:
+    '''returns: 
+    - 0 on level 1,
+    - 1 on level 2,
+    - 2 on level 3 and 4,
+    - 3 on any higher level.'''
+    if level <= 3: return level - 1
+    if level == 4: return 2
+    return 3
 
 def dice_label(eyes):
     return f"W{eyes}"
@@ -89,6 +105,7 @@ def get_move_options(item):
         case ItemType.RUNE:
             return ["Hauptpfote", "Nebenpfote", "Körper"]
         case ItemType.CONDITION:
+            print("Error: This should not happen.")
             return ["Mumm"]
 
 def move_item(item, option):
@@ -164,12 +181,17 @@ def change_condition(item):
     if item.condition < 0:
         item.condition = 3
 
-def delete_item(item):
-    st.session_state.backpack.remove(item)
+def delete_item(item, ignored_conditions=False):
+    if not ignored_conditions:
+        st.session_state.backpack.remove(item)
+    else :
+        st.session_state.ignored.remove(item)
 
 def get_unique_id():
     unique_id = 0
     used_ids = {item.id for item in st.session_state.backpack}
+    for condition in st.session_state.ignored:
+        used_ids.add(condition.id)
     if st.session_state.primary:
         used_ids.add(st.session_state.primary.id)
     if st.session_state.secondary:
@@ -187,16 +209,16 @@ st.title("Mausritter Charakterbogen")
 #st.text("Zuletzt gespeichert: " + st.session_state.last_saved)
 
 # Mouse name and saving button
-nam, lvl, exp, sav = st.columns([5.2, 2, 2.25, 0.75], vertical_alignment="bottom")
+nam, lvl, exp, sav = st.columns([5.3, 2, 2.25, 0.77], vertical_alignment="bottom")
 with nam:
     temp_values['name'] = st.text_input("Charaktername", value=cookie['name'])
 with lvl:
-    st.number_input("Level", 1, 100, 1, 1)
+    level = st.number_input("Level", 1, 100, 1, 1)
+    guts = calculate_guts(level)
 with exp:
     st.number_input("Erfahrung", 0, None, 0, 1)
 with sav:
-    is_save_pressed = st.button("", key="Speichern", type="primary", icon=":material/save:",
-                                help="Speichert dein Charakterblatt als Cookie, sodass es beim Neuladen der Seite erhalten bleibt.", use_container_width=True)
+    is_save_pressed = st.button("", key="Speichern", type="primary", icon=":material/save:", help=HELP_SAVE, use_container_width=True)
 
 # STÄ
 st1, st2, st3, st4 = st.columns([1, 2, 2, 5], vertical_alignment="bottom")
@@ -296,7 +318,7 @@ with tab2:
     if _weight > 6:
         st.warning("Du bist belastet!")
     for item in st.session_state.backpack:
-        bp_item, bp_stat, bp_cond, bp_weig, bp_move, bp_delete = st.columns([3.5,2,1,1.5,2.5,1])
+        bp_item, bp_stat, bp_cond, bp_weig, bp_move, bp_delete = st.columns([4.7,2,1,1.5,2.8,1])
         # Name and description
         bp_item.markdown(f"**{item.name}**", help=item.description)
         # Attack dice or armor value
@@ -310,11 +332,32 @@ with tab2:
         # Weight
         bp_weig.button(str(item.weight), disabled=True, icon=":material/weight:", key=f"{item.id}-weight", help="Gewicht", use_container_width=True)
         # Moving
-        _selection = bp_move.selectbox("move", get_move_options(item), index=None, key=f"{item.id}-move", help="Gegenstand verschieben", placeholder="Verschieben", label_visibility="collapsed")
-        if _selection != None:
-            move_item(item, _selection)
+        if item.type != ItemType.CONDITION:
+            _selection = bp_move.selectbox("move", get_move_options(item), index=None, key=f"{item.id}-move", help="Gegenstand verschieben", placeholder="Verschieben", label_visibility="collapsed")
+            if _selection != None:
+                move_item(item, _selection)
         # Delete
-        bp_delete.button("", type="primary", icon=":material/delete_forever:", key=f"{item.id}-delete", help="Item wegwerfen", on_click=delete_item, args=(item,), use_container_width=True)
+        _help = HELP_REMOVE_CONDITION if item.type == ItemType.CONDITION else HELP_REMOVE_ITEM
+        bp_delete.button("", type="primary", icon=":material/delete_forever:", key=f"{item.id}-delete", help=_help, on_click=delete_item, args=(item,), use_container_width=True)
+    # Displaying ignored conditions
+    if len(st.session_state.ignored) > 0:
+        match guts:
+            case 0:
+                pass
+            case 1:
+                st.text("Durch Mumm ignorierte Zustände:", 
+                        help="Auf Level 2 hast du genug Mumm um einen Zustand zu ignorieren.")
+            case _:
+                st.text("Durch Mumm ignorierte Zustände:",
+                        help=f"Auf Level {level} hast du genug Mumm um {guts} Zustände zu ignorieren.")
+    for condition in st.session_state.ignored:
+        co_item, co_stat, co_cond, co_weig, co_move, co_delete = st.columns([4.7,2,1,1.5,2.8,1])
+        # Name and description
+        co_item.markdown(f"**{condition.name}**", help=condition.description)
+        # Weight
+        co_weig.button(str(condition.weight), disabled=True, icon=":material/weight:", key=f"{condition.id}-weight", help="Gewicht", use_container_width=True)
+        # Delete
+        co_delete.button("", type="primary", icon=":material/delete_forever:", key=f"{condition.id}-delete", help=HELP_REMOVE_CONDITION, on_click=delete_item, args=(condition,True), use_container_width=True)
 
 with tab3:
     st.text("Hier kannst du einen neuen Gegenstand oder Zustand erstellen, der dann in deinem Rucksack landet.")
@@ -361,11 +404,13 @@ with tab3:
         # it is important to give each item a unique id.
         new_item_id = get_unique_id()
         new_item = Item(new_item_id, new_item_name, new_item_type, new_item_space, new_item_condition, new_item_dice, new_item_armor, new_item_description)
-        st.session_state.backpack.append(new_item)
+        # Check if the mouse has the guts to ignore another condition
+        if new_item_type == ItemType.CONDITION and guts > len(st.session_state.ignored):
+            st.session_state.ignored.append(new_item)
+        else:
+            st.session_state.backpack.append(new_item)
         st.session_state.new_item_toast = new_item.type.value
         st.rerun()
-        #temp_values["items"].append(new_item)
-        # TODO: add to cookie as json object
 
 # Sidebar
 with st.sidebar:
