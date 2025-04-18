@@ -164,14 +164,18 @@ def delete_item(item):
 
 # Title
 st.title("Mausritter Charakterbogen")
-st.text("Zuletzt gespeichert: " + st.session_state.last_saved)
+#st.text("Zuletzt gespeichert: " + st.session_state.last_saved)
 
 # Mouse name and saving button
-nam, sav = st.columns([1, 1], vertical_alignment="bottom")
+nam, lvl, exp, sav = st.columns([5.2, 2, 2.25, 0.75], vertical_alignment="bottom")
 with nam:
-    temp_values['name'] = st.text_input("Name", value=cookie['name'], help="Der Name deiner Maus")
+    temp_values['name'] = st.text_input("Charaktername", value=cookie['name'])
+with lvl:
+    st.number_input("Level", 1, 100, 1, 1)
+with exp:
+    st.number_input("Erfahrung", 0, None, 0, 1)
 with sav:
-    is_save_pressed = st.button("Speichern nicht vergessen!", type="primary",
+    is_save_pressed = st.button("", key="Speichern", type="primary", icon=":material/save:",
                                 help="Speichert dein Charakterblatt als Cookie, sodass es beim Neuladen der Seite erhalten bleibt.", use_container_width=True)
 
 # STÄ
@@ -179,9 +183,9 @@ st1, st2, st3, st4 = st.columns([1, 2, 2, 5], vertical_alignment="bottom")
 with st1:
     st.text("STÄ", help="Stärke")
 with st2:
-    temp_values['st_max'] = st.number_input("Maximal", 0, None, cookie['st_max'], 1, None, "st_max", "Maximaler Stärkewert", label_visibility="visible")
+    temp_values['st_max'] = st.number_input("Maximal", 0, None, cookie['st_max'], 1, None, "st_max", label_visibility="visible")
 with st3:
-    temp_values['st_now'] = st.number_input("Aktuell", 0, None, cookie['st_now'], 1, None, "st_now", "Aktueller Stärkewert", label_visibility="visible")
+    temp_values['st_now'] = st.number_input("Aktuell", 0, None, cookie['st_now'], 1, None, "st_now", label_visibility="visible")
 with st4:
     st.empty()
 
@@ -191,9 +195,9 @@ ge1, ge2, ge3, ge4 = st.columns([1, 2, 2, 5], vertical_alignment="bottom")
 with ge1:
     st.text("GES", help="Geschicklichkeit")
 with ge2:
-    temp_values['ge_max'] = st.number_input("Maximal", 0, None, cookie['ge_max'], 1, None, "ge_max", "Maximaler Geschicklichkeitswert", label_visibility="collapsed")
+    temp_values['ge_max'] = st.number_input("Maximal", 0, None, cookie['ge_max'], 1, None, "ge_max", label_visibility="collapsed")
 with ge3:
-    temp_values['ge_now'] = st.number_input("Aktuell", 0, None, cookie['ge_now'], 1, None, "ge_now", "Aktueller Geschicklichkeitswert", label_visibility="collapsed")
+    temp_values['ge_now'] = st.number_input("Aktuell", 0, None, cookie['ge_now'], 1, None, "ge_now", label_visibility="collapsed")
 with ge4:
     st.empty()
 
@@ -202,9 +206,9 @@ wi1, wi2, wi3, wi4 = st.columns([1, 2, 2, 5], vertical_alignment="bottom")
 with wi1:
     st.text("WIL", help="Willenskraft")
 with wi2:
-    temp_values['wi_max'] = st.number_input("Maximal", 0, None, cookie['wi_max'], 1, None, "wi_max", "Maximaler Willenskraftwert", label_visibility="collapsed")
+    temp_values['wi_max'] = st.number_input("Maximal", 0, None, cookie['wi_max'], 1, None, "wi_max", label_visibility="collapsed")
 with wi3:
-    temp_values['wi_now'] = st.number_input("Aktuell", 0, None, cookie['wi_now'], 1, None, "wi_now", "Aktueller Willenskraftwert", label_visibility="collapsed")
+    temp_values['wi_now'] = st.number_input("Aktuell", 0, None, cookie['wi_now'], 1, None, "wi_now", label_visibility="collapsed")
 with wi4:
     st.empty()
 
@@ -213,9 +217,9 @@ tp1, tp2, tp3, tp4 = st.columns([1, 2, 2, 5], vertical_alignment="bottom")
 with tp1:
     st.text("TP", help="Trefferschutzpunkte")
 with tp2:
-    temp_values['tp_max'] = st.number_input("Maximal", 0, None, cookie['tp_max'], 1, None, "tp_max", "Maximale Trefferschutzpunkte", label_visibility="collapsed")
+    temp_values['tp_max'] = st.number_input("Maximal", 0, None, cookie['tp_max'], 1, None, "tp_max", label_visibility="collapsed")
 with tp3:
-    temp_values['tp_now'] = st.number_input("Aktuell", 0, None, cookie['tp_now'], 1, None, "tp_now", "Aktuelle Trefferschutzpunkte", label_visibility="collapsed")
+    temp_values['tp_now'] = st.number_input("Aktuell", 0, None, cookie['tp_now'], 1, None, "tp_now", label_visibility="collapsed")
 with tp4:
     st.empty()
 
@@ -287,7 +291,6 @@ with tab2:
         bp_weig.button(str(item.weight), disabled=True, icon=":material/weight:", key=f"{item.name}-weight", help="Gewicht", use_container_width=True)
         # Moving
         _selection = bp_move.selectbox("move", get_move_options(item), index=None, key=f"{item.name}-move", help="Gegenstand verschieben", placeholder="Verschieben", label_visibility="collapsed")
-        print(_selection)
         if _selection != None:
             move_item(item, _selection)
         # Delete
