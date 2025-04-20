@@ -3,7 +3,9 @@ import streamlit as st
 from streamlit_local_storage import LocalStorage
 import time
 from item import Item, ItemType
-import random
+from dice import Dice, Roll
+
+st.set_page_config("Mausritter Charakterbogen")
 
 # Session state
 if "last_saved" not in st.session_state:
@@ -25,6 +27,8 @@ if "body1" not in st.session_state:
     st.session_state.body1 = None
 if "body2" not in st.session_state:
     st.session_state.body2 = None
+if "dice_log" not in st.session_state:
+    st.session_state.dice_log = []
 
 # Cookies
 ls = LocalStorage()
@@ -43,8 +47,20 @@ if cookie == None:
     }
 temp_values = {key: None for key in cookie}
 HELP_SAVE = "Speichert dein Charakterblatt als Cookie, sodass es beim Neuladen der Seite erhalten bleibt."
-HELP_REMOVE_ITEM = "Gegenstand entfernen"
+HELP_REMOVE_ITEM = "Gegenstand wegwerfen"
 HELP_REMOVE_CONDITION = "Zustand auflösen"
+dice_list = [Dice(4), Dice(6), Dice(8), Dice(10), Dice(12), Dice(20), Dice(100)]
+
+# Custom css to make sidebar always overlap content and not deform the whole layout
+st.markdown("""
+    <style>
+    /* Sidebar überlappend machen */
+    [data-testid="stMain"] {
+        position: absolute;
+        inset: 0px;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 def calculate_guts(level) -> Literal[0, 1, 2, 3]:
     '''returns: 
@@ -56,31 +72,42 @@ def calculate_guts(level) -> Literal[0, 1, 2, 3]:
     if level == 4: return 2
     return 3
 
-def dice_label(eyes):
-    return f"W{eyes}"
-
 def enum_value(enum):
     return enum.value
 
-def display_equipment(item):
-    eq_item, eq_stat, eq_cond, eq_weig, eq_move, eq_delete = st.columns([5,2,1,1.5,1,1])
+def display_equipment(item, where:Literal["Equipped", "Backpack", "Conditions"] = "Equipped"):
+    # The columns have different sizes depending on the part of the app where they are listed
+    _column_sizes = [6.7,2,1,1.5,1,1] if where == "Equipped" else [4.7,2,1,1.5,2.8,1]
+    _item, _stat, _cond, _weig, _move, _delete = st.columns(_column_sizes)
     # Name and description
-    eq_item.markdown(f"**{item.name}**", help=item.description)
+    _item.markdown(f"**{item.name}**", help=item.description)
     # Attack dice or armor value
     if item.dice != None:
-        eq_stat.button(item.dice, disabled=True, icon=":material/casino:", key=f"{item.id}-stat", help="Angriffswürfel", use_container_width=True)
+        _stat.button(item.dice.get_label(), icon=":material/casino:", key=f"{item.id}-stat", help="Angriffswürfel", on_click=roll, args=(item.dice, f"{item.name} :grey[{item.dice.get_label()}] macht {{}} Schaden!"), disabled=where!="Equipped", use_container_width=True)
     elif item.armor != None:
-        eq_stat.button(str(item.armor), disabled=True, icon=":material/shield:", key=f"{item.id}-stat", help="Verteidigung", use_container_width=True)
+        _stat.button(str(item.armor), disabled=True, icon=":material/shield:", key=f"{item.id}-stat", help="Verteidigung", use_container_width=True)
     # Condition
     if item.condition != None:
-        eq_cond.button("", icon=f":material/counter_{item.condition}:", key=f"{item.id}-cond", help="Übrige Anwendungen", on_click=change_condition, args=(item,), use_container_width=True)
+        _cond.button("", icon=f":material/counter_{item.condition}:", key=f"{item.id}-cond", help="Übrige Anwendungen", on_click=change_condition, args=(item,), use_container_width=True)
     # Weight
-    eq_weig.button(str(item.weight), disabled=True, icon=":material/weight:", key=f"{item.id}-weight", help="Gewicht", use_container_width=True)
+    _weig.button(str(item.weight), disabled=True, icon=":material/weight:", key=f"{item.id}-weight", help="Gewicht", use_container_width=True)
     # Moving
-    eq_move.button("", type="secondary", icon=":material/exit_to_app:", key=f"{item.id}-move", help="Gegenstand in den Rucksack verschieben", on_click=item_to_backpack, args=(item,), use_container_width=True)
+    if where == "Equipped":
+        _move.button("", type="secondary", icon=":material/exit_to_app:", key=f"{item.id}-move", help="Gegenstand in den Rucksack verschieben", on_click=item_to_backpack, args=(item,), use_container_width=True)
+    elif where == "Backpack":
+        if item.type != ItemType.CONDITION:
+            _selection = _move.selectbox("move", get_move_options(item), index=None, key=f"{item.id}-move", help="Gegenstand verschieben", placeholder="Verschieben", label_visibility="collapsed")
+            if _selection != None:
+                move_item(item, _selection)
     # Delete
-    eq_delete.button("", type="primary", icon=":material/delete_forever:", key=f"{item.id}-delete", help="Item wegwerfen", on_click=item_to_backpack, args=(item,True), use_container_width=True)
-
+    _help = HELP_REMOVE_CONDITION if item.type == ItemType.CONDITION else HELP_REMOVE_ITEM
+    if where == "Equipped":
+        _delete.button("", type="primary", icon=":material/delete_forever:", key=f"{item.id}-delete", help=_help, on_click=item_to_backpack, args=(item,True), use_container_width=True)
+    elif where == "Backpack":
+        _delete.button("", type="primary", icon=":material/delete_forever:", key=f"{item.id}-delete", help=_help, on_click=delete_item, args=(item,), use_container_width=True)
+    else:
+        _delete.button("", type="primary", icon=":material/delete_forever:", key=f"{item.id}-delete", help=_help, on_click=delete_item, args=(item,True), use_container_width=True)
+        
 def get_move_options(item):
     match(item.type):
         case ItemType.ITEM:
@@ -204,6 +231,11 @@ def get_unique_id():
         unique_id += 1
     return unique_id
 
+def roll(dice, format_text=None, against=None):
+    st.session_state.dice_log.append(dice.roll(format_text=format_text, against=against))
+    if len(st.session_state.dice_log) > 10:
+        st.session_state.dice_log.pop(0)
+
 # Title
 st.title("Mausritter Charakterbogen")
 #st.text("Zuletzt gespeichert: " + st.session_state.last_saved)
@@ -232,7 +264,6 @@ with st4:
     st.empty()
 
 # GES
-_rolled_dice = ""
 ge1, ge2, ge3, ge4 = st.columns([1, 2, 2, 5], vertical_alignment="bottom")
 with ge1:
     st.text("GES", help="Geschicklichkeit")
@@ -318,28 +349,8 @@ with tab2:
     if _weight > 6:
         st.warning("Du bist belastet!")
     for item in st.session_state.backpack:
-        bp_item, bp_stat, bp_cond, bp_weig, bp_move, bp_delete = st.columns([4.7,2,1,1.5,2.8,1])
-        # Name and description
-        bp_item.markdown(f"**{item.name}**", help=item.description)
-        # Attack dice or armor value
-        if item.dice != None:
-            bp_stat.button(item.dice, disabled=True, icon=":material/casino:", key=f"{item.id}-stat", help="Angriffswürfel", use_container_width=True)
-        elif item.armor != None:
-            bp_stat.button(str(item.armor), disabled=True, icon=":material/shield:", key=f"{item.id}-stat", help="Verteidigung", use_container_width=True)
-        # Condition
-        if item.condition != None:
-            bp_cond.button("", icon=f":material/counter_{item.condition}:", key=f"{item.id}-cond", help="Übrige Anwendungen", on_click=change_condition, args=(item,), use_container_width=True)
-        # Weight
-        bp_weig.button(str(item.weight), disabled=True, icon=":material/weight:", key=f"{item.id}-weight", help="Gewicht", use_container_width=True)
-        # Moving
-        if item.type != ItemType.CONDITION:
-            _selection = bp_move.selectbox("move", get_move_options(item), index=None, key=f"{item.id}-move", help="Gegenstand verschieben", placeholder="Verschieben", label_visibility="collapsed")
-            if _selection != None:
-                move_item(item, _selection)
-        # Delete
-        _help = HELP_REMOVE_CONDITION if item.type == ItemType.CONDITION else HELP_REMOVE_ITEM
-        bp_delete.button("", type="primary", icon=":material/delete_forever:", key=f"{item.id}-delete", help=_help, on_click=delete_item, args=(item,), use_container_width=True)
-    # Displaying ignored conditions
+        display_equipment(item, "Backpack")
+    # # Displaying ignored conditions
     if len(st.session_state.ignored) > 0:
         match guts:
             case 0:
@@ -351,13 +362,7 @@ with tab2:
                 st.text("Durch Mumm ignorierte Zustände:",
                         help=f"Auf Level {level} hast du genug Mumm um {guts} Zustände zu ignorieren.")
     for condition in st.session_state.ignored:
-        co_item, co_stat, co_cond, co_weig, co_move, co_delete = st.columns([4.7,2,1,1.5,2.8,1])
-        # Name and description
-        co_item.markdown(f"**{condition.name}**", help=condition.description)
-        # Weight
-        co_weig.button(str(condition.weight), disabled=True, icon=":material/weight:", key=f"{condition.id}-weight", help="Gewicht", use_container_width=True)
-        # Delete
-        co_delete.button("", type="primary", icon=":material/delete_forever:", key=f"{condition.id}-delete", help=HELP_REMOVE_CONDITION, on_click=delete_item, args=(condition,True), use_container_width=True)
+        display_equipment(condition, "Conditions")
 
 with tab3:
     st.text("Hier kannst du einen neuen Gegenstand oder Zustand erstellen, der dann in deinem Rucksack landet.")
@@ -377,7 +382,7 @@ with tab3:
             case ItemType.WEAPON:
                 _double_size = st.toggle("Zweipfotig")
                 new_item_space = (True, True, False, False, 2 if _double_size else 1)
-                new_item_dice = st.text_input("Angriffswürfel")
+                new_item_dice = st.selectbox("Angriffswürfel", dice_list, index=1, format_func=Dice.get_label)
                 new_item_condition = st.number_input("Übrige Anwendungen", 0, 3, 3, 1)
             case ItemType.ARMOR:
                 _extra_slot = st.pills("Zusätzlich benötigter Platz", ["Nebenpfote", "Zweiter Körperplatz"], selection_mode="single")
@@ -399,25 +404,34 @@ with tab3:
                 new_item_description = st.text_input("Beschreibe den Zustand")
 
 
-    if st.button("Gegenstand hinzufügen", type="primary") and new_item_name != "":
-        # As two items can have the same name but every streamlit component needs a unique id,
-        # it is important to give each item a unique id.
-        new_item_id = get_unique_id()
-        new_item = Item(new_item_id, new_item_name, new_item_type, new_item_space, new_item_condition, new_item_dice, new_item_armor, new_item_description)
-        # Check if the mouse has the guts to ignore another condition
-        if new_item_type == ItemType.CONDITION and guts > len(st.session_state.ignored):
-            st.session_state.ignored.append(new_item)
+    if st.button(f"{new_item_type.value} hinzufügen", type="primary"):
+        if new_item_name.strip() == "":
+            st.toast(f":red[Jede/r {new_item_type.value} braucht einen Namen]", icon=":material/error:")
         else:
-            st.session_state.backpack.append(new_item)
-        st.session_state.new_item_toast = new_item.type.value
-        st.rerun()
+            # As two items can have the same name but every streamlit component needs a unique id,
+            # it is important to give each item a unique id.
+            new_item_id = get_unique_id()
+            new_item = Item(new_item_id, new_item_name, new_item_type, new_item_space, new_item_condition, new_item_dice, new_item_armor, new_item_description)
+            # Check if the mouse has the guts to ignore another condition
+            if new_item_type == ItemType.CONDITION and guts > len(st.session_state.ignored):
+                st.session_state.ignored.append(new_item)
+            else:
+                st.session_state.backpack.append(new_item)
+            st.session_state.new_item_toast = new_item.type.value
+            st.rerun()
 
 # Sidebar
 with st.sidebar:
-    _selected_dice = st.selectbox("Würfel", [4, 6, 8, 10, 12, 20, 100], index=5, format_func=dice_label)
+    _selected_dice = st.selectbox("Würfel", dice_list, index=5, format_func=Dice.get_label)
     if st.button("Würfeln", use_container_width=True):
-        _rolled_dice = random.randint(1, _selected_dice)
-    st.text(f"Letzer Würfelwurf: {_rolled_dice}")
+        roll(_selected_dice)
+    for roll in reversed(st.session_state.dice_log):
+        if roll.format_text:
+            st.markdown(roll.format_text.format(roll.outcome))
+        elif roll.color:
+            st.markdown(f"{roll.dice_label} -> :{roll.color}[{roll.outcome}]")
+        else:
+            st.markdown(f"{roll.dice_label} -> {roll.outcome}")
 
 # Logic
 if is_save_pressed:
